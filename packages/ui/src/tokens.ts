@@ -1,0 +1,1 @@
+export const tokens = { colors: { ink: '#080A14', surface: '#111527', violet: '#9E7BFF', pink: '#FF4D99', mint: '#53F6D4', text: '#F8F7FF', muted: '#9FA3B8' }, radius: { card: 24, pill: 999 } } as const;

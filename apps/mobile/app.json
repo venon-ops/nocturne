@@ -1,0 +1,1 @@
+{ "expo": { "name": "Nocturne", "slug": "nocturne-tickets", "scheme": "nocturne", "plugins": ["expo-router", ["expo-camera", { "cameraPermission": "Autoriser Nocturne à scanner les billets." }]], "experiments": { "typedRoutes": true } } }

@@ -1,0 +1,4 @@
+{
+  "name": "@nocturne/mobile", "private": true, "main": "expo-router/entry", "scripts": { "start": "expo start", "android": "expo start --android", "ios": "expo start --ios" },
+  "dependencies": { "@nocturne/types": "workspace:*", "@supabase/supabase-js": "^2.47.10", "expo": "^52.0.27", "expo-camera": "^16.0.13", "expo-router": "^4.0.17", "expo-status-bar": "~2.0.0", "react": "^19.2.0", "react-native": "0.76.6", "react-native-qrcode-svg": "^6.3.14" }
+}

@@ -1211,12 +1211,17 @@
 
 .ticket-phase-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1.5fr) minmax(120px, .8fr) minmax(100px, .7fr) auto;
+  grid-template-columns: 34px minmax(180px, 1.3fr) minmax(120px, .8fr) minmax(100px, .7fr) 44px;
   align-items: end;
   gap: 12px;
   padding-top: 18px;
   border-top: 1px solid var(--line);
 }
+
+.phase-drag{width:34px;height:44px;padding:0;display:grid;place-items:center;align-self:end;touch-action:none}
+.quick-dates{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:0 0 16px;color:var(--muted);font-size:12px}
+.quick-dates button{border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--text);padding:7px 12px;cursor:pointer}
+.quick-dates button:hover{border-color:var(--mint);color:var(--mint)}
 
 .phase-remove {
   display: grid;

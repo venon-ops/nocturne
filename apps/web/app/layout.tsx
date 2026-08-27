@@ -3,6 +3,7 @@ import './styles.css';
 import { Suspense } from 'react';
 import RoleRouteGuard from './components/RoleRouteGuard';
 import MobileHomeNav from './components/MobileHomeNav';
+import NavigationTransitions from './components/NavigationTransitions';
 export const metadata: Metadata = { title: 'NOCTURNE — live differently', description: 'Billetterie sociale pour la nuit.' };
-export default function Layout({ children }: Readonly<{ children: React.ReactNode }>) { return <html lang="fr"><body><Suspense><RoleRouteGuard/><MobileHomeNav/></Suspense>{children}</body></html>; }
+export default function Layout({ children }: Readonly<{ children: React.ReactNode }>) { return <html lang="fr"><body><Suspense><RoleRouteGuard/><MobileHomeNav/><NavigationTransitions/></Suspense>{children}</body></html>; }
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronDown, LogOut, User } from 'lucide-react';
+import { ChevronDown, LogOut, Ticket, User } from 'lucide-react';
 import { getSupabase } from '../../lib/supabase-browser';
 import Link from 'next/link';
 
@@ -118,6 +118,11 @@ export default function AccountLink() {
 
           <div className="account-divider" />
 
+          <Link className="account-profile-link" href="/tickets" onClick={() => setOpen(false)}>
+            <Ticket size={16} />
+            Mes billets
+          </Link>
+
             <Link
             className="account-profile-link"
             href="/profile"
@@ -140,3 +145,4 @@ export default function AccountLink() {
     </div>
   );
 }
+

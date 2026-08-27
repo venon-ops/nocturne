@@ -285,7 +285,10 @@ export default function ProfilePage() {
 
   return (
     <main className="profile-page">
-      <nav>
+      <nav className="profile-main-nav">
+        <Link className="profile-mobile-back" href="/" aria-label="Retour">
+          <ArrowLeft size={20}/>
+        </Link>
         <Link className="brand" href="/">
           NOCTURNE<span>°</span>
         </Link>

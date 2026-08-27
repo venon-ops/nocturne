@@ -1,6 +1,9 @@
 node_modules
 .turbo
 .next
+.next-*
+*.tsbuildinfo
+supabase/.temp/
 dist
 .expo
 .env

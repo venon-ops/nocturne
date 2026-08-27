@@ -1,1 +1,1 @@
-{ "compilerOptions": { "target": "ES2022", "lib": ["ES2022"], "strict": true, "esModuleInterop": true, "skipLibCheck": true, "moduleResolution": "Bundler" } }
+{ "compilerOptions": { "target": "ES2022", "lib": ["ES2022", "DOM", "DOM.Iterable"], "strict": true, "esModuleInterop": true, "skipLibCheck": true, "moduleResolution": "Bundler" } }

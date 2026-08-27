@@ -102,7 +102,7 @@ export default function AccountLink() {
     <div className="account-menu">
       <button
         className="account account-button"
-        onClick={() => setOpen(!open)}
+        onClick={() => {if(matchMedia('(max-width: 700px)').matches){router.push('/profile');return}setOpen(!open)}}
         type="button"
       >
         <span>{user.name}</span>

@@ -2,7 +2,7 @@
 
 import { ChangeEvent, FormEvent, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Camera, ExternalLink, Plus, Save, X } from 'lucide-react';
+import { ArrowLeft, CalendarHeart, Camera, ExternalLink, MapPinned, Plus, Save, Settings, TicketCheck, X } from 'lucide-react';
 import { getSupabase } from '../../lib/supabase-browser';
 import { MUSIC_GENRES } from '../../lib/music-genres';
 
@@ -36,6 +36,8 @@ export default function ProfilePage() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [savedUsername, setSavedUsername] = useState<string | null>(null);
   const [genreDraft, setGenreDraft] = useState('');
+  const [interestedEvents,setInterestedEvents]=useState<Array<{id:string;slug:string;title:string;starts_at:string;city:string}>>([]);
+  const [stats,setStats]=useState({events:0,venues:0,tickets:0});
 
   function publicAvatarUrl(path: string, cacheBust?: string) {
     const { data } = getSupabase().storage.from(AVATAR_BUCKET).getPublicUrl(path);
@@ -97,6 +99,13 @@ export default function ProfilePage() {
           preferred_genres: data.preferred_genres ?? [],
         });
         setSavedUsername(data.username ?? null);
+        const [{data:ownedTickets},{data:interests}]=await Promise.all([
+          supabase.from('tickets').select('id,events(id,city),orders!inner(buyer_id)').eq('orders.buyer_id',user.id),
+          supabase.from('event_interests').select('events(id,slug,title,starts_at,city)').eq('user_id',user.id)
+        ]);
+        const ticketRows=(ownedTickets??[]) as unknown as Array<{id:string;events:{id:string;city:string}|null}>;
+        setStats({tickets:ticketRows.length,events:new Set(ticketRows.map(row=>row.events?.id).filter(Boolean)).size,venues:new Set(ticketRows.map(row=>row.events?.city).filter(Boolean)).size});
+        const now=new Date();setInterestedEvents(((interests??[]) as unknown as Array<{events:{id:string;slug:string;title:string;starts_at:string;city:string}|null}>).map(row=>row.events).filter((item):item is {id:string;slug:string;title:string;starts_at:string;city:string}=>Boolean(item&&new Date(item.starts_at)>now)).sort((a,b)=>a.starts_at.localeCompare(b.starts_at)));
         if (data.avatar_path) {
           setAvatarUrl(publicAvatarUrl(data.avatar_path));
         }
@@ -276,13 +285,16 @@ export default function ProfilePage() {
 
   return (
     <main className="profile-page">
-      <nav>
+      <nav className="profile-main-nav">
+        <Link className="profile-mobile-back" href="/" aria-label="Retour">
+          <ArrowLeft size={20}/>
+        </Link>
         <Link className="brand" href="/">
           NOCTURNE<span>°</span>
         </Link>
 
-        <Link className="account" href="/">
-          Retour
+        <Link className="account profile-settings-link" href="#profile-settings" aria-label="Paramètres du profil">
+          <Settings size={18}/><span>Paramètres</span>
         </Link>
       </nav>
 
@@ -294,6 +306,9 @@ export default function ProfilePage() {
         <p className="profile-intro">
           Personnalisez votre identité Nocturne et votre profil communautaire.
         </p>
+
+        {profile.preferred_genres.length>0&&<section className="profile-favorite-genres"><p className="eyebrow">VOS STYLES</p><div>{profile.preferred_genres.map(genre=><span key={genre}>{genre}</span>)}</div></section>}
+        <section className="profile-interests"><div className="section-head"><div><p className="eyebrow">ÇA VOUS INTÉRESSE</p><h2>Vos prochaines soirées.</h2></div></div>{interestedEvents.length?<div>{interestedEvents.slice(0,4).map(item=><Link href={`/events/${item.slug}`} key={item.id}><CalendarHeart/><span><strong>{item.title}</strong><small>{new Intl.DateTimeFormat('fr-FR',{dateStyle:'medium',timeStyle:'short'}).format(new Date(item.starts_at))} · {item.city}</small></span></Link>)}</div>:<p className="profile-empty">Les soirées marquées « Ça m’intéresse » apparaîtront ici.</p>}</section>
 
         <div className="profile-public-access">
           {savedUsername ? (
@@ -308,7 +323,7 @@ export default function ProfilePage() {
           )}
         </div>
 
-        <form className="profile-form" onSubmit={handleSubmit}>
+        <form id="profile-settings" className="profile-form" onSubmit={handleSubmit}>
           <div className="profile-avatar-editor">
             <div className="profile-avatar profile-avatar-preview">
               {avatarUrl ? (
@@ -434,6 +449,7 @@ export default function ProfilePage() {
             {saving ? 'Enregistrement...' : 'Enregistrer mon profil'}
           </button>
         </form>
+        <section className="profile-user-stats"><article><TicketCheck/><strong>{stats.tickets}</strong><span>billets obtenus</span></article><article><CalendarHeart/><strong>{stats.events}</strong><span>soirées vécues</span></article><article><MapPinned/><strong>{stats.venues}</strong><span>lieux visités</span></article></section>
 
         <Link className="profile-back" href="/">
           <ArrowLeft size={16} />
@@ -443,3 +459,4 @@ export default function ProfilePage() {
     </main>
   );
 }
+

@@ -2,10 +2,11 @@
 
 import { ChangeEvent, FormEvent, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, CalendarPlus, ImagePlus, LayoutList, LoaderCircle, LogOut, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, CalendarPlus, GripVertical, ImagePlus, LayoutList, LoaderCircle, LogOut, Plus, Trash2 } from 'lucide-react';
 import { getSupabase } from '../../lib/supabase-browser';
 import { MUSIC_GENRES } from '../../lib/music-genres';
 import OrganizerEventsList from './OrganizerEventsList';
+import AddressAutocomplete from '../components/AddressAutocomplete';
 
 type AccessState = 'loading' | 'guest' | 'forbidden' | 'pending' | 'organizer' | 'admin';
 type TicketPhase = { id: number; name: string; quantity: string; price: string };
@@ -20,6 +21,7 @@ export default function OrganizerPage() {
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
   const [city, setCity] = useState('');
+  const [address,setAddress]=useState('');
   const [startDate, setStartDate] = useState('');
   const [startTime, setStartTime] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -41,6 +43,7 @@ export default function OrganizerPage() {
   const [error, setError] = useState('');
   const [quotaError, setQuotaError] = useState('');
   const [activeView, setActiveView] = useState<'events'|'create'>('events');
+  const [draggedPhase,setDraggedPhase]=useState<number|null>(null);
 
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get('view') === 'create') setActiveView('create');
@@ -79,6 +82,14 @@ export default function OrganizerPage() {
     setPhases(current => [...current, { id: Date.now(), name: `Phase ${current.length + 1}`, quantity: '', price: '' }]);
   }
 
+  function quickDate(offsetDays: number) {
+    const date = new Date();
+    date.setDate(date.getDate() + offsetDays);
+    const value = date.toISOString().slice(0, 10);
+    setStartDate(value);
+    setEndDate(value);
+  }
+
   function selectBanner(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]; setError('');
     if (!file) return;
@@ -98,6 +109,7 @@ export default function OrganizerPage() {
         name: phase.name.trim(),
         quantity: Number(phase.quantity),
         price_cents: Math.round(Number(phase.price.replace(',', '.')) * 100),
+        position: phases.indexOf(phase),
       }));
       if (end <= start) throw new Error('end_before_start');
       if (ticketPhases.reduce((sum, phase) => sum + phase.quantity, 0) > Number(maxCapacity)) {
@@ -114,6 +126,8 @@ export default function OrganizerPage() {
         p_status: publicationMode === 'now' ? 'published' : 'draft', p_artist_names: artistNames,
       });
       if (createError) throw createError;
+      const {error:addressError}=await supabase.from('events').update({address:address.trim()}).eq('id',eventId);
+      if(addressError)throw addressError;
       let uploadedPath: string|null = null;
       try {
         if (bannerFile) {
@@ -135,9 +149,9 @@ export default function OrganizerPage() {
         throw afterCreateError;
       }
       setMessage(publicationMode === 'now' ? 'Événement publié.' : publicationMode === 'scheduled' ? 'Événement enregistré et publication programmée.' : 'Événement enregistré en brouillon.');
-      if (publicationMode === 'now') location.assign(`/events/${slug}`);
+      if (publicationMode === 'now') location.assign(`/events/${slug}?preview=organizer`);
       else {
-        setTitle(''); setSlug(''); setCity(''); setStartDate(''); setStartTime(''); setEndDate(''); setEndTime(''); setMaxCapacity('');
+        setTitle(''); setSlug(''); setCity(''); setAddress(''); setStartDate(''); setStartTime(''); setEndDate(''); setEndTime(''); setMaxCapacity('');
         setGenre(''); setDescription(''); setArtists('');
         setPhases([{ id: Date.now(), name: 'Tarif standard', quantity: '', price: '' }]);
         setPublicationMode('draft'); setPublishDate(''); setPublishTime(''); setBannerFile(null);
@@ -174,14 +188,15 @@ export default function OrganizerPage() {
     <form className="event-create-form" onSubmit={submit}>
       <div className="profile-field"><label htmlFor="event-title">Nom de la soirée</label><input id="event-title" required minLength={3} maxLength={120} value={title} onChange={event=>updateTitle(event.target.value)}/></div>
       <div className="profile-field"><label htmlFor="event-slug">Adresse publique</label><input id="event-slug" required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" value={slug} onChange={event=>setSlug(slugify(event.target.value))}/><small>/events/{slug || 'nom-de-la-soiree'}</small></div>
-      <div className="profile-field"><label htmlFor="event-city">Ville</label><input id="event-city" required maxLength={100} value={city} onChange={event=>setCity(event.target.value)}/></div>
-      <fieldset className="event-datetime"><legend>Début et fin</legend><div className="event-form-grid"><div className="profile-field"><label htmlFor="start-date">Date de début</label><input id="start-date" type="date" required value={startDate} onChange={event=>{setStartDate(event.target.value);if(!endDate)setEndDate(event.target.value)}}/></div><div className="profile-field"><label htmlFor="start-time">Heure de début</label><input id="start-time" type="time" required value={startTime} onChange={event=>setStartTime(event.target.value)}/></div><div className="profile-field"><label htmlFor="end-date">Date de fin</label><input id="end-date" type="date" required min={startDate} value={endDate} onChange={event=>setEndDate(event.target.value)}/></div><div className="profile-field"><label htmlFor="end-time">Heure de fin</label><input id="end-time" type="time" required value={endTime} onChange={event=>setEndTime(event.target.value)}/></div></div></fieldset>
+      <div className="profile-field"><label>Adresse du lieu</label><AddressAutocomplete value={address} city={city} onChange={(nextAddress,nextCity)=>{setAddress(nextAddress);if(nextCity)setCity(nextCity)}}/><small>Sélectionnez une proposition pour remplir automatiquement la ville.</small></div>
+      <div className="profile-field"><label htmlFor="event-city">Ville</label><input id="event-city" required readOnly value={city}/></div>
+      <fieldset className="event-datetime"><legend>Début et fin</legend><div className="quick-dates"><span>Choix rapide :</span><button type="button" onClick={()=>quickDate(0)}>Aujourd’hui</button><button type="button" onClick={()=>quickDate(1)}>Demain</button><button type="button" onClick={()=>{const day=new Date().getDay();quickDate((6-day+7)%7||7)}}>Ce week-end</button></div><div className="event-form-grid"><div className="profile-field"><label htmlFor="start-date">Date de début</label><input id="start-date" type="date" required value={startDate} onChange={event=>{setStartDate(event.target.value);if(!endDate)setEndDate(event.target.value)}}/></div><div className="profile-field"><label htmlFor="start-time">Heure de début</label><input id="start-time" type="time" required value={startTime} onChange={event=>setStartTime(event.target.value)}/></div><div className="profile-field"><label htmlFor="end-date">Date de fin</label><input id="end-date" type="date" required min={startDate} value={endDate} onChange={event=>setEndDate(event.target.value)}/></div><div className="profile-field"><label htmlFor="end-time">Heure de fin</label><input id="end-time" type="time" required value={endTime} onChange={event=>setEndTime(event.target.value)}/></div></div></fieldset>
       <div className="profile-field"><label htmlFor="event-artists">Artistes programmés</label><textarea id="event-artists" rows={4} value={artists} onChange={event=>setArtists(event.target.value)} placeholder="Un nom par ligne, ou séparés par des virgules"/><small>Les variantes de casse et d’accents sont regroupées automatiquement.</small></div>
       <div className="profile-field"><label htmlFor="event-genre">Genre musical</label><input id="event-genre" list="music-genres" maxLength={100} value={genre} onChange={event=>setGenre(event.target.value)} placeholder="Rechercher ou saisir un style"/><datalist id="music-genres">{MUSIC_GENRES.map(item=><option value={item} key={item}/>)}</datalist><small>{MUSIC_GENRES.length} styles proposés, avec saisie libre possible.</small></div>
       <div className="profile-field"><label htmlFor="event-description">Description</label><textarea id="event-description" rows={6} value={description} onChange={event=>setDescription(event.target.value)}/></div>
       <div className="profile-field event-banner-field"><label>Bannière de la soirée</label>{bannerPreview?<img className="event-banner-preview" src={bannerPreview} alt="Aperçu de la bannière"/>:<div className="event-banner-placeholder"><ImagePlus size={28}/><span>Format paysage recommandé, 10 Mo maximum</span></div>}<label className="profile-avatar-button" htmlFor="event-banner"><ImagePlus size={17}/>{bannerFile?'Changer la bannière':'Choisir une bannière'}</label><input className="profile-avatar-input" id="event-banner" type="file" accept="image/jpeg,image/png,image/webp" onChange={selectBanner}/></div>
       <div className="profile-field"><label htmlFor="max-capacity">Capacité maximale</label><input id="max-capacity" type="number" required min={1} step={1} value={maxCapacity} onChange={event=>{setMaxCapacity(event.target.value);setPhases([{id:Date.now(),name:'Tarif standard',quantity:'',price:''}]);setQuotaError('')}}/><small>Information privée, visible uniquement par l’organisation et l’administration. Saisissez-la pour débloquer les phases.</small></div>
-      {Number(maxCapacity)>0?<fieldset className="ticket-phases"><div className="ticket-phases-title"><legend>Phases de billetterie</legend><button type="button" onClick={addPhase} disabled={phases.reduce((sum,phase)=>sum+(Number(phase.quantity)||0),0)>=Number(maxCapacity)}><Plus size={16}/>Ajouter une phase</button></div>{phases.map((phase,index)=>{const others=phases.reduce((sum,item)=>sum+(item.id===phase.id?0:Number(item.quantity)||0),0);return <div className="ticket-phase-row" key={phase.id}><div className="profile-field"><label htmlFor={`phase-name-${phase.id}`}>Nom de la phase</label><input id={`phase-name-${phase.id}`} required maxLength={100} value={phase.name} onChange={event=>updatePhase(phase.id,'name',event.target.value)} placeholder="Early bird, Phase 1…"/></div><div className="profile-field"><label htmlFor={`phase-quantity-${phase.id}`}>Nombre de places</label><input id={`phase-quantity-${phase.id}`} type="number" required min={1} max={Math.max(1,Number(maxCapacity)-others)} step={1} value={phase.quantity} onChange={event=>updatePhase(phase.id,'quantity',event.target.value)}/></div><div className="profile-field"><label htmlFor={`phase-price-${phase.id}`}>Prix (€)</label><input id={`phase-price-${phase.id}`} type="number" required min={0} step="0.01" value={phase.price} onChange={event=>updatePhase(phase.id,'price',event.target.value)}/></div><button className="phase-remove" type="button" aria-label={`Supprimer la phase ${index+1}`} disabled={phases.length===1} onClick={()=>setPhases(current=>current.filter(item=>item.id!==phase.id))}><Trash2 size={17}/></button></div>})}{quotaError&&<p className="profile-error">{quotaError}</p>}<small>Total attribué : {phases.reduce((sum,phase)=>sum+(Number(phase.quantity)||0),0)} / {Number(maxCapacity)} places</small></fieldset>:<div className="ticket-phases-locked">Renseignez la capacité maximale pour configurer les phases de billetterie.</div>}
+      {Number(maxCapacity)>0?<fieldset className="ticket-phases"><div className="ticket-phases-title"><legend>Phases de billetterie</legend><button type="button" onClick={addPhase} disabled={phases.reduce((sum,phase)=>sum+(Number(phase.quantity)||0),0)>=Number(maxCapacity)}><Plus size={16}/>Ajouter une phase</button></div>{phases.map((phase,index)=>{const others=phases.reduce((sum,item)=>sum+(item.id===phase.id?0:Number(item.quantity)||0),0);return <div className="ticket-phase-row" onDragOver={event=>event.preventDefault()} onDrop={()=>{if(draggedPhase===null||draggedPhase===index)return;setPhases(current=>{const next=[...current];const [moved]=next.splice(draggedPhase,1);next.splice(index,0,moved);return next});setDraggedPhase(null)}} key={phase.id}><button className="phase-drag" draggable onDragStart={()=>setDraggedPhase(index)} onDragEnd={()=>setDraggedPhase(null)} type="button" aria-label={`Déplacer ${phase.name}`} title="Glisser pour réordonner"><GripVertical size={20}/></button><div className="profile-field"><label htmlFor={`phase-name-${phase.id}`}>Nom de la phase</label><input id={`phase-name-${phase.id}`} required maxLength={100} value={phase.name} onChange={event=>updatePhase(phase.id,'name',event.target.value)} placeholder="Early bird, Phase 1…"/></div><div className="profile-field"><label htmlFor={`phase-quantity-${phase.id}`}>Nombre de places</label><input id={`phase-quantity-${phase.id}`} type="number" required min={1} max={Math.max(1,Number(maxCapacity)-others)} step={1} value={phase.quantity} onChange={event=>updatePhase(phase.id,'quantity',event.target.value)}/></div><div className="profile-field"><label htmlFor={`phase-price-${phase.id}`}>Prix (€)</label><input id={`phase-price-${phase.id}`} type="number" required min={0} step="0.01" value={phase.price} onChange={event=>updatePhase(phase.id,'price',event.target.value)}/></div><button className="phase-remove" type="button" aria-label={`Supprimer la phase ${index+1}`} disabled={phases.length===1} onClick={()=>setPhases(current=>current.filter(item=>item.id!==phase.id))}><Trash2 size={17}/></button></div>})}{quotaError&&<p className="profile-error">{quotaError}</p>}<small>Glissez les phases pour définir leur ordre. Total attribué : {phases.reduce((sum,phase)=>sum+(Number(phase.quantity)||0),0)} / {Number(maxCapacity)} places</small></fieldset>:<div className="ticket-phases-locked">Renseignez la capacité maximale pour configurer les phases de billetterie.</div>}
       <div className="profile-field"><label htmlFor="publication-mode">Publication</label><select id="publication-mode" value={publicationMode} onChange={event=>setPublicationMode(event.target.value as typeof publicationMode)}><option value="draft">Enregistrer en brouillon</option><option value="now">Publier maintenant</option><option value="scheduled">Programmer la publication</option></select></div>
       {publicationMode==='scheduled'&&<div className="event-form-grid scheduled-publication"><div className="profile-field"><label htmlFor="publish-date">Jour de publication</label><input id="publish-date" type="date" required min={new Date().toISOString().slice(0,10)} value={publishDate} onChange={event=>setPublishDate(event.target.value)}/></div><div className="profile-field"><label htmlFor="publish-time">Heure de publication</label><input id="publish-time" type="time" required value={publishTime} onChange={event=>setPublishTime(event.target.value)}/></div></div>}
       {message&&<p className="profile-success">{message}</p>}{error&&<p className="profile-error">{error}</p>}
@@ -189,3 +204,6 @@ export default function OrganizerPage() {
     </form></div>}
   </div>;
 }
+
+
+

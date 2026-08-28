@@ -2,7 +2,7 @@
 
 import { ChangeEvent, FormEvent, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, CalendarHeart, Camera, ExternalLink, MapPinned, Plus, Save, Settings, TicketCheck, X } from 'lucide-react';
+import { ArrowLeft, CalendarHeart, Camera, ExternalLink, LogOut, MapPinned, Plus, Save, Settings, TicketCheck, X } from 'lucide-react';
 import { getSupabase } from '../../lib/supabase-browser';
 import { MUSIC_GENRES } from '../../lib/music-genres';
 
@@ -235,6 +235,11 @@ export default function ProfilePage() {
     }
   }
 
+  async function handleLogout() {
+    await getSupabase().auth.signOut();
+    window.location.assign('/');
+  }
+
   if (loading) {
     return (
       <main className="profile-page">
@@ -451,10 +456,10 @@ export default function ProfilePage() {
         </form>
         <section className="profile-user-stats"><article><TicketCheck/><strong>{stats.tickets}</strong><span>billets obtenus</span></article><article><CalendarHeart/><strong>{stats.events}</strong><span>soirées vécues</span></article><article><MapPinned/><strong>{stats.venues}</strong><span>lieux visités</span></article></section>
 
-        <Link className="profile-back" href="/">
-          <ArrowLeft size={16} />
-          Retour aux soirées
-        </Link>
+        <button className="profile-back profile-logout" type="button" onClick={handleLogout}>
+          <LogOut size={16} />
+          Se déconnecter
+        </button>
       </section>
     </main>
   );

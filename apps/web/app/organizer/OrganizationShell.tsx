@@ -3,13 +3,13 @@
 import { CSSProperties, ReactNode, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, ListMusic, LogOut, Settings } from 'lucide-react';
+import { LayoutDashboard, ListMusic, LogOut, ScanLine, Settings, Ticket } from 'lucide-react';
 import { getSupabase } from '../../lib/supabase-browser';
 
 export default function OrganizationShell({children}:{children:ReactNode}) {
   const pathname=usePathname();
-  const active=pathname.includes('/settings')?'settings':pathname==='/organizer/dashboard'?'dashboard':'events';
-  const indexes={dashboard:0,events:1,settings:2};
+  const active=pathname.includes('/settings')?'settings':pathname.includes('/scanners')?'scanners':pathname.includes('/tickets')?'tickets':pathname==='/organizer/dashboard'?'dashboard':'events';
+  const indexes={dashboard:0,events:1,tickets:2,scanners:3,settings:4};
   const previousIndex=useRef(indexes[active]);
   const direction=indexes[active]>=previousIndex.current?'forward':'backward';
   useEffect(()=>{previousIndex.current=indexes[active]},[active]);
@@ -23,6 +23,8 @@ export default function OrganizationShell({children}:{children:ReactNode}) {
         <i className="pro-nav-highlight" aria-hidden="true"/>
         {item('dashboard','/organizer/dashboard','Vue d’ensemble',<LayoutDashboard size={18}/>)}
         {item('events','/organizer','Visuel soirées',<ListMusic size={18}/>)}
+        {item('tickets','/organizer/tickets','Billets',<Ticket size={18}/>)}
+        {item('scanners','/organizer/scanners','Équipe scan',<ScanLine size={18}/>)}
         {item('settings','/organizer/settings','Paramètres',<Settings size={18}/>)}
       </nav>
       <div className="pro-sidebar-bottom"><Link href="/">Voir le site public</Link><button type="button" onClick={logout}><LogOut size={17}/>Se déconnecter</button></div>

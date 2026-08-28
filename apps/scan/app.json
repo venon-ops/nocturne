@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "NOCTURNE Scan",
+    "slug": "nocturne-scan",
+    "scheme": "nocturne-scan",
+    "plugins": [
+      "expo-router",
+      ["expo-camera", { "cameraPermission": "Autoriser NOCTURNE Scan à contrôler les billets." }]
+    ],
+    "experiments": { "typedRoutes": true },
+    "ios": { "bundleIdentifier": "com.nocturne.scan" },
+    "android": { "package": "com.nocturne.scan" }
+  }
+}

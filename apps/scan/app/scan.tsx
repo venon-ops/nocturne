@@ -5,7 +5,7 @@ import { Animated, Easing, Keyboard, KeyboardAvoidingView, Modal, Platform, Pres
 import { supabase } from '../lib/supabase';
 import { getEventCache, isOnline, pendingCount, validateOffline, validateOfflinePublicCode } from '../lib/offline';
 
-type Result={type:'accepted'|'already_used'|'wrong_event'|'invalid'|'unauthorized'|'technical_error'|'offline_unavailable';name:string|null}|null;
+type Result={type:'accepted'|'already_used'|'wrong_event'|'invalid'|'entry_closed'|'unauthorized'|'technical_error'|'offline_unavailable';name:string|null}|null;
 
 export default function Scan(){
   const {event,title,session,label}=useLocalSearchParams<{event:string;title:string;session:string;label:string}>();
@@ -47,7 +47,7 @@ export default function Scan(){
     if(!await isOnline()){const offlineResult=await validateOffline(event,session,rawValue.slice(prefix.length));setResult(offlineResult);if(offlineResult.type==='accepted'){setCount(current=>current+1);setPending(current=>current+1)}return}
     const {data:{user},error:userError}=await supabase.auth.getUser();if(userError){setResult({type:'technical_error',name:null});return}if(!user||!event){setResult({type:'unauthorized',name:null});return}
     const {data,error}=await supabase.rpc('validate_ticket_token_for_session',{p_token:rawValue.slice(prefix.length),p_event:event,p_session:session});
-    if(error){setResult({type:error.message.toLowerCase().includes('not authorized')?'unauthorized':'technical_error',name:null});return}
+    if(error){const message=error.message.toLowerCase();setResult({type:message.includes('not authorized')?'unauthorized':message.includes('entry cutoff passed')?'entry_closed':'technical_error',name:null});return}
     const response=Array.isArray(data)?data[0]:null;const type=response?.result==='accepted'||response?.result==='already_used'||response?.result==='wrong_event'?response.result:'invalid';setResult({type,name:response?.attendee_name??null});if(type==='accepted'){const {count:next}=await supabase.from('check_ins').select('id',{count:'exact',head:true}).eq('event_id',event);setCount(current=>next??current+1)}
   }
 
@@ -63,7 +63,7 @@ export default function Scan(){
       return;
     }
     const {data,error}=await supabase.rpc('validate_ticket_public_code_for_session',{p_code:code,p_event:event,p_session:session});
-    if(error){setResult({type:error.message.toLowerCase().includes('not authorized')?'unauthorized':'technical_error',name:null});return}
+    if(error){const message=error.message.toLowerCase();setResult({type:message.includes('not authorized')?'unauthorized':message.includes('entry cutoff passed')?'entry_closed':'technical_error',name:null});return}
     const response=Array.isArray(data)?data[0]:null;const type=response?.result==='accepted'||response?.result==='already_used'||response?.result==='wrong_event'?response.result:'invalid';
     setResult({type,name:response?.attendee_name??null});
     if(type==='accepted'){const {count:next}=await supabase.from('check_ins').select('id',{count:'exact',head:true}).eq('event_id',event);setCount(current=>next??current+1);closeManual()}
@@ -84,7 +84,7 @@ export default function Scan(){
         <View style={s.frame}/><Text style={s.bottomHelp}>Maintenez le QR code dans le cadre</Text>
         <Pressable style={s.manualTrigger} onPress={openManual}><Text style={s.manualTriggerText}>Saisir un numéro de billet</Text></Pressable>
       </Animated.View>
-      {result&&<View style={[s.banner,{top:109},accepted?s.success:technical?s.warning:s.failure]}><Text style={s.icon}>{accepted?'✓':technical?'!':'×'}</Text><View><Text style={s.bannerTitle}>{accepted?'BILLET VALIDE':result.type==='already_used'?'DÉJÀ SCANNÉ':result.type==='wrong_event'?'BILLET INVALIDE':result.type==='offline_unavailable'?'HORS LIGNE INDISPONIBLE':result.type==='technical_error'?'ERREUR RÉSEAU':result.type==='unauthorized'?'NON AUTORISÉ':'BILLET INVALIDE'}</Text><Text style={s.bannerText}>{result.type==='wrong_event'?'Mauvais événement':result.type==='offline_unavailable'?'Téléchargez d’abord cette soirée':result.type==='technical_error'?'Réessayez dans un instant':result.name??''}</Text></View></View>}
+      {result&&<View style={[s.banner,{top:109},accepted?s.success:technical?s.warning:s.failure]}><Text style={s.icon}>{accepted?'✓':technical?'!':'×'}</Text><View><Text style={s.bannerTitle}>{accepted?'BILLET VALIDE':result.type==='already_used'?'DÉJÀ SCANNÉ':result.type==='entry_closed'?'HEURE D’ENTRÉE DÉPASSÉE':result.type==='wrong_event'?'BILLET INVALIDE':result.type==='offline_unavailable'?'HORS LIGNE INDISPONIBLE':result.type==='technical_error'?'ERREUR RÉSEAU':result.type==='unauthorized'?'NON AUTORISÉ':'BILLET INVALIDE'}</Text><Text style={s.bannerText}>{result.type==='wrong_event'?'Mauvais événement':result.type==='entry_closed'?'Ce tarif n’autorise plus l’entrée':result.type==='offline_unavailable'?'Manifeste automatique indisponible':result.type==='technical_error'?'Réessayez dans un instant':result.name??''}</Text></View></View>}
     </View>
     <Modal visible={manualOpen} transparent statusBarTranslucent animationType="slide" onShow={()=>setTimeout(()=>manualInputRef.current?.focus(),180)} onRequestClose={closeManual}><KeyboardAvoidingView style={[s.manualModal,{backgroundColor:'rgba(8,10,20,.22)'}]} behavior={Platform.OS==='ios'?'padding':undefined} keyboardVerticalOffset={12}><View style={[s.manualPanel,{transform:[{translateY:53}]}]}><Text style={s.manualTitle}>Validation manuelle</Text><Text style={s.manualHelp}>Saisissez le numéro inscrit sous le QR code.</Text><TextInput ref={manualInputRef} style={s.manualInput} value={manualCode} onChangeText={setManualCode} placeholder="NOC-7K4M-92XP" placeholderTextColor="#777C91" autoCapitalize="characters" autoCorrect={false} maxLength={15}/><View style={s.manualActions}><Pressable onPress={closeManual}><Text style={s.manualCancel}>Annuler</Text></Pressable><Pressable style={s.manualValidate} onPress={()=>void validateManual()}><Text style={s.manualValidateText}>Valider le billet</Text></Pressable></View></View></KeyboardAvoidingView></Modal>
   </View>;

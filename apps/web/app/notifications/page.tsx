@@ -1,0 +1,28 @@
+'use client';
+
+import {useEffect,useState} from 'react';
+import Link from 'next/link';
+import {ArrowLeft,Bell,CheckCheck,Clock3,LoaderCircle,RotateCcw,Ticket} from 'lucide-react';
+import {getSupabase} from '../../lib/supabase-browser';
+
+type NotificationRow={id:string;type:string;payload:Record<string,unknown>;read_at:string|null;created_at:string};
+type WaitlistDestination={event_slug:string;ticket_type_id:string};
+type ResaleDestination={event_id:string};
+
+function content(item:NotificationRow,waitlistDestinations:Record<string,WaitlistDestination>,resaleDestinations:Record<string,ResaleDestination>){
+ const waitlistId=String(item.payload.waitlist_id??''),destination=waitlistDestinations[waitlistId],waitlistHref=destination?`/events/${destination.event_slug}?ticketType=${destination.ticket_type_id}`:'/notifications';
+ const listingId=String(item.payload.listing_id??''),resaleDestination=resaleDestinations[listingId],resaleHref=resaleDestination?`/tickets?event=${resaleDestination.event_id}`:'/tickets';
+ if(item.type==='ticket_resold')return{icon:<RotateCcw/>,title:'Billet revendu',body:`Ton billet a été revendu. Le remboursement de ${((Number(item.payload.refund_cents)||0)/100).toLocaleString('fr-FR',{style:'currency',currency:'EUR'})} est en cours.`,href:resaleHref,action:'Voir la soirée'};
+ if(item.type==='waitlist_batch_available')return{icon:<Ticket/>,title:'Tes billets sont disponibles',body:`Un lot de ${Number(item.payload.quantity)||1} billet${Number(item.payload.quantity)>1?'s':''} est réservé pendant 30 minutes.`,href:waitlistHref,action:'Finaliser l’achat'};
+ if(item.type==='waitlist_payment_action_required')return{icon:<Clock3/>,title:'Paiement à confirmer',body:'Stripe demande une confirmation supplémentaire pour terminer ton achat automatique.',href:waitlistHref,action:'Terminer le paiement'};
+ return{icon:<Bell/>,title:'Notification NOCTURNE',body:'Une nouvelle information est disponible sur ton compte.',href:'/',action:'Consulter'};
+}
+
+export default function NotificationsPage(){
+ const [items,setItems]=useState<NotificationRow[]>([]),[destinations,setDestinations]=useState<Record<string,WaitlistDestination>>({}),[resaleDestinations,setResaleDestinations]=useState<Record<string,ResaleDestination>>({}),[loading,setLoading]=useState(true),[error,setError]=useState('');
+ useEffect(()=>{void(async()=>{const supabase=getSupabase(),{data:{user}}=await supabase.auth.getUser();if(!user){location.assign('/auth?next=/notifications');return}const {data,error}=await supabase.from('notifications').select('id,type,payload,read_at,created_at').order('created_at',{ascending:false}).limit(100);if(error)setError('Impossible de charger les notifications.');else{const notifications=(data??[]) as NotificationRow[];setItems(notifications);const waitlistIds=[...new Set(notifications.map(item=>String(item.payload.waitlist_id??'')).filter(Boolean))],listingIds=[...new Set(notifications.map(item=>String(item.payload.listing_id??'')).filter(Boolean))];const [resolvedWaitlists,resolvedResales]=await Promise.all([Promise.all(waitlistIds.map(async id=>{const {data}=await supabase.rpc('get_waitlist_notification_destination',{p_waitlist:id});const row=Array.isArray(data)?data[0]:null;return row?[id,row as WaitlistDestination] as const:null})),Promise.all(listingIds.map(async id=>{const {data}=await supabase.rpc('get_resale_notification_destination',{p_listing:id});const row=Array.isArray(data)?data[0]:null;return row?[id,row as ResaleDestination] as const:null}))]);setDestinations(Object.fromEntries(resolvedWaitlists.filter((entry):entry is readonly [string,WaitlistDestination]=>entry!==null)));setResaleDestinations(Object.fromEntries(resolvedResales.filter((entry):entry is readonly [string,ResaleDestination]=>entry!==null)))}setLoading(false)})()},[]);
+ async function markRead(id:string){const now=new Date().toISOString(),{error}=await getSupabase().from('notifications').update({read_at:now}).eq('id',id).is('read_at',null);if(!error)setItems(current=>current.map(item=>item.id===id?{...item,read_at:now}:item))}
+ async function markAll(){const now=new Date().toISOString(),{error}=await getSupabase().from('notifications').update({read_at:now}).is('read_at',null);if(!error)setItems(current=>current.map(item=>({...item,read_at:item.read_at??now})))}
+ if(loading)return <main className="notifications-page"><LoaderCircle className="spin"/></main>;
+ return <main className="notifications-page"><nav><Link className="brand" href="/">NOCTURNE<span>°</span></Link><Link className="back" href="/"><ArrowLeft size={16}/>Retour</Link></nav><section className="notifications-content"><header><div><p className="eyebrow">MON ESPACE</p><h1>Notifications.</h1><p>Reventes, listes d’attente et informations importantes.</p></div>{items.some(item=>!item.read_at)&&<button onClick={()=>void markAll()}><CheckCheck size={17}/>Tout marquer comme lu</button>}</header>{error&&<p className="profile-error">{error}</p>}{!items.length?<div className="notifications-empty"><Bell/><h2>Aucune notification.</h2><p>Les nouvelles concernant tes billets apparaîtront ici.</p></div>:<div className="notifications-list">{items.map(item=>{const view=content(item,destinations,resaleDestinations);return <article className={item.read_at?'read':''} key={item.id}><span className="notification-icon">{view.icon}</span><div><div className="notification-title"><h2>{view.title}</h2>{!item.read_at&&<i>Nouvelle</i>}</div><p>{view.body}</p><time>{new Date(item.created_at).toLocaleString('fr-FR',{dateStyle:'medium',timeStyle:'short'})}</time></div><Link href={view.href} onClick={()=>void markRead(item.id)}>{view.action}</Link></article>})}</div>}</section></main>;
+}

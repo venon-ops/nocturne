@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronDown, LogOut, Ticket, User } from 'lucide-react';
+import { Bell, ChevronDown, LogOut, Ticket, User } from 'lucide-react';
 import { getSupabase } from '../../lib/supabase-browser';
 import Link from 'next/link';
 
@@ -17,6 +17,7 @@ export default function AccountLink() {
   const [user, setUser] = useState<UserState | null>(null);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [unread, setUnread] = useState(0);
 
   useEffect(() => {
     const supabase = getSupabase();
@@ -34,8 +35,11 @@ export default function AccountLink() {
             user.email?.split('@')[0] ??
             'Mon compte',
         });
+        const {count}=await supabase.from('notifications').select('*',{count:'exact',head:true}).is('read_at',null);
+        setUnread(count??0);
       } else {
         setUser(null);
+        setUnread(0);
       }
 
       setLoading(false);
@@ -67,6 +71,8 @@ export default function AccountLink() {
       subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(()=>{if(!user)return;const supabase=getSupabase();let active=true;async function refresh(){const {count}=await supabase.from('notifications').select('*',{count:'exact',head:true}).is('read_at',null);if(active)setUnread(count??0)}const timer=setInterval(()=>void refresh(),30000);window.addEventListener('focus',refresh);return()=>{active=false;clearInterval(timer);window.removeEventListener('focus',refresh)}},[user]);
 
   async function handleLogout() {
     setOpen(false);
@@ -100,6 +106,9 @@ export default function AccountLink() {
 
   return (
     <div className="account-menu">
+      <Link className="notification-trigger" href="/notifications" aria-label={unread?`${unread} notification${unread>1?'s':''} non lue${unread>1?'s':''}`:'Notifications'}>
+        <Bell size={18}/>{unread>0&&<span>{unread>9?'9+':unread}</span>}
+      </Link>
       <button
         className="account account-button"
         onClick={() => {if(matchMedia('(max-width: 700px)').matches){router.push('/profile');return}setOpen(!open)}}
@@ -121,6 +130,11 @@ export default function AccountLink() {
           <Link className="account-profile-link" href="/tickets" onClick={() => setOpen(false)}>
             <Ticket size={16} />
             Mes billets
+          </Link>
+
+          <Link className="account-profile-link" href="/notifications" onClick={() => setOpen(false)}>
+            <Bell size={16}/>
+            Notifications{unread>0&&<strong className="notification-menu-count">{unread}</strong>}
           </Link>
 
             <Link

@@ -8,7 +8,7 @@ import { MUSIC_GENRES } from '../../lib/music-genres';
 import OrganizerEventsList from './OrganizerEventsList';
 import AddressAutocomplete from '../components/AddressAutocomplete';
 
-type AccessState = 'loading' | 'guest' | 'forbidden' | 'pending' | 'organizer' | 'admin';
+type AccessState = 'loading' | 'guest' | 'forbidden' | 'pending' | 'organizer';
 type TicketPhase = { id: number; name: string; quantity: string; price: string };
 
 function slugify(value: string) {
@@ -54,7 +54,7 @@ export default function OrganizerPage() {
       const { data: authData } = await supabase.auth.getUser();
       if (!authData.user) { setAccess('guest'); return; }
       const { data } = await supabase.from('profiles').select('role').eq('id', authData.user.id).single();
-      setAccess(data?.role === 'admin' ? 'admin' : data?.role === 'organizer' ? 'organizer' : data?.role === 'organizer_pending' ? 'pending' : 'forbidden');
+      setAccess(data?.role === 'organizer' ? 'organizer' : data?.role === 'organizer_pending' ? 'pending' : 'forbidden');
     }
     checkAccess();
     return ()=>window.removeEventListener('organizer-view',showEvents);

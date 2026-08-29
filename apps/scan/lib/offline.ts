@@ -2,9 +2,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
 import * as Network from 'expo-network';
 import { supabase } from './supabase';
+import { isManifestPreparationDue, isTicketEntryOpen, mergePendingScans, type CachedEvent, type ManifestTicket } from './manifest';
 
-export type CachedEvent={id:string;title:string;city:string;starts_at:string;ends_at:string;status:string};
-export type ManifestTicket={ticket_hash:string;ticket_id:string;public_code:string;attendee_name:string|null;ticket_status:'valid'|'used'|'cancelled'|'refunded'};
+export { isManifestPreparationDue, MANIFEST_PREPARATION_LEAD_MS, type CachedEvent, type ManifestTicket } from './manifest';
 export type OfflineScan={id:string;eventId:string;sessionId:string;ticketHash:string;scannedAt:string};
 export type ActiveScanSession={id:string;eventId:string;eventTitle:string;label:string;startedAt:string;scannerId:string};
 type EventCache={event:CachedEvent;tickets:ManifestTicket[];downloadedAt:string;baseCount:number};
@@ -13,6 +13,9 @@ const EVENTS_KEY='nocturne-scan:events';
 const QUEUE_KEY='nocturne-scan:queue';
 const ACTIVE_SESSION_KEY='nocturne-scan:active-session';
 const eventKey=(eventId:string)=>`nocturne-scan:manifest:${eventId}`;
+let syncInFlight:Promise<SyncResult>|null=null;
+
+type SyncResult={synced:number;conflicts:number;pending:number;error:string|null};
 
 async function readJson<T>(key:string,fallback:T):Promise<T>{const value=await AsyncStorage.getItem(key);if(!value)return fallback;try{return JSON.parse(value) as T}catch{return fallback}}
 
@@ -27,15 +30,28 @@ export async function clearActiveSession(){await AsyncStorage.removeItem(ACTIVE_
 export async function downloadManifest(event:CachedEvent){
   const [{data,error},{count}]=await Promise.all([supabase.rpc('get_offline_ticket_manifest',{p_event:event.id}),supabase.from('check_ins').select('id',{count:'exact',head:true}).eq('event_id',event.id)]);
   if(error)throw error;
-  const cache:EventCache={event,tickets:(data??[]) as ManifestTicket[],downloadedAt:new Date().toISOString(),baseCount:count??0};
+  const pending=await readJson<OfflineScan[]>(QUEUE_KEY,[]);
+  const tickets=mergePendingScans((data??[]) as ManifestTicket[],pending.filter(item=>item.eventId===event.id).map(item=>item.ticketHash));
+  const cache:EventCache={event,tickets,downloadedAt:new Date().toISOString(),baseCount:count??0};
   await AsyncStorage.setItem(eventKey(event.id),JSON.stringify(cache));
   return cache;
+}
+
+export async function prepareDueManifests(events:CachedEvent[],now=Date.now()){
+  const due=events.filter(event=>isManifestPreparationDue(event,now));
+  const results=await Promise.allSettled(due.map(event=>downloadManifest(event)));
+  return results.reduce<{prepared:EventCache[];failed:string[]}>((summary,result,index)=>{
+    if(result.status==='fulfilled')summary.prepared.push(result.value);
+    else summary.failed.push(due[index].id);
+    return summary;
+  },{prepared:[],failed:[]});
 }
 
 export async function hashToken(token:string){return Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256,token)}
 
 async function validateCachedTicket(cache:EventCache,eventId:string,sessionId:string,ticket:ManifestTicket|undefined){
   if(!ticket)return {type:'invalid' as const,name:null};
+  if(!isTicketEntryOpen(ticket))return {type:'entry_closed' as const,name:ticket.attendee_name};
   if(ticket.ticket_status==='used')return {type:'already_used' as const,name:ticket.attendee_name};
   if(ticket.ticket_status!=='valid')return {type:'invalid' as const,name:ticket.attendee_name};
   ticket.ticket_status='used';await AsyncStorage.setItem(eventKey(eventId),JSON.stringify(cache));
@@ -56,7 +72,7 @@ export async function validateOfflinePublicCode(eventId:string,sessionId:string,
 
 export async function pendingCount(eventId?:string){const queue=await readJson<OfflineScan[]>(QUEUE_KEY,[]);return eventId?queue.filter(item=>item.eventId===eventId).length:queue.length}
 
-export async function syncPending(){
+async function runPendingSync():Promise<SyncResult>{
   const queue=await readJson<OfflineScan[]>(QUEUE_KEY,[]);
   if(!queue.length)return {synced:0,conflicts:0,pending:0,error:null as string|null};
   const {data:{session}}=await supabase.auth.getSession();
@@ -72,4 +88,10 @@ export async function syncPending(){
   }
   await AsyncStorage.setItem(QUEUE_KEY,JSON.stringify(remaining));
   return {synced,conflicts,pending:remaining.length,error:lastError};
+}
+
+export function syncPending(){
+  if(syncInFlight)return syncInFlight;
+  syncInFlight=runPendingSync().finally(()=>{syncInFlight=null});
+  return syncInFlight;
 }

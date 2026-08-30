@@ -10,6 +10,7 @@
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
     "@nocturne/types": "workspace:*",
+    "@react-native-async-storage/async-storage": "2.2.0",
     "@stripe/stripe-react-native": "0.50.3",
     "@supabase/supabase-js": "^2.47.10",
     "expo": "^54.0.0",

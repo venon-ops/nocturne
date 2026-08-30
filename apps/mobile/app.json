@@ -1,1 +1,33 @@
-{ "expo": { "name": "Nocturne", "slug": "nocturne-tickets", "scheme": "nocturne", "plugins": ["expo-router"], "experiments": { "typedRoutes": true } } }
+{
+  "expo": {
+    "name": "Nocturne",
+    "slug": "nocturne-tickets",
+    "scheme": "nocturne",
+    "plugins": [
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "color": "#53F6D4",
+          "defaultChannel": "nocturne"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "d62c8589-04e0-4401-89ce-cbd99874ccd7"
+      }
+    },
+    "owner": "venonnnns-team",
+    "ios": {
+      "bundleIdentifier": "com.venonnnnsteam.nocturnetickets",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    }
+  }
+}

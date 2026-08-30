@@ -1,4 +1,4 @@
-import {router,usePathname,type Href} from 'expo-router';
+import {router,useGlobalSearchParams,usePathname,type Href} from 'expo-router';
 import {Animated,Easing,Pressable,StyleSheet,Text,View} from 'react-native';
 import {useEffect,useRef,useState} from 'react';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -7,10 +7,11 @@ import BrandIcon from './BrandIcon';
 const tabs=[{href:'/',icon:'feed',label:'Fil'},{href:'/upcoming',icon:'calendar',label:'À venir'},{href:'/ticket',icon:'ticket',label:'Billets'},{href:'/search',icon:'search',label:'Explorer'}] as const;
 
 export default function MobileTabBar(){
- const pathname=usePathname(),insets=useSafeAreaInsets(),[width,setWidth]=useState(0),position=useRef(new Animated.Value(0)).current;
+ const pathname=usePathname(),params=useGlobalSearchParams<{detail?:string}>(),insets=useSafeAreaInsets(),[width,setWidth]=useState(0);
  const activeIndex=Math.max(0,tabs.findIndex(tab=>tab.href===pathname));
- useEffect(()=>{Animated.timing(position,{toValue:activeIndex,duration:260,easing:Easing.bezier(.22,1,.36,1),useNativeDriver:true}).start()},[activeIndex,position]);
- if(['/auth','/event','/profile','/notifications'].includes(pathname))return null;
+ const hidden=['/auth','/event','/profile','/notifications'].includes(pathname)||(pathname==='/ticket'&&params.detail==='1'),position=useRef(new Animated.Value(activeIndex)).current,wasHidden=useRef(hidden);
+ useEffect(()=>{if(wasHidden.current&&!hidden)position.setValue(activeIndex);else if(!hidden)Animated.timing(position,{toValue:activeIndex,duration:260,easing:Easing.bezier(.22,1,.36,1),useNativeDriver:true}).start();wasHidden.current=hidden},[activeIndex,hidden,position]);
+ if(hidden)return null;
  const slot=width?Math.max(0,(width-14)/4):0;
  return <View onLayout={event=>setWidth(event.nativeEvent.layout.width)} style={[s.bar,{bottom:Math.max(insets.bottom,12)}]}>{slot>0?<Animated.View pointerEvents="none" style={[s.slider,{width:slot,transform:[{translateX:Animated.multiply(position,slot)}]}]}/>:null}{tabs.map((tab,index)=>{const active=index===activeIndex;return <Pressable key={tab.href} onPress={()=>{if(!active)router.replace(tab.href as Href)}} style={({pressed})=>[s.tab,pressed&&s.pressed]}><Animated.View style={[s.iconWrap,active&&s.iconActive]}><BrandIcon name={tab.icon} color={active?'#53F6D4':'#74798E'} size={21}/></Animated.View><Text numberOfLines={1} style={[s.label,active&&s.labelActive]}>{tab.label}</Text></Pressable>})}</View>
 }

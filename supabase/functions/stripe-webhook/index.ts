@@ -7,13 +7,20 @@ Deno.serve(async req=>{
  const signature=req.headers.get('stripe-signature');
  if(!stripeSecret||!webhookSecret)return new Response('Missing Stripe configuration',{status:500});
  if(!signature)return new Response('Missing Stripe signature',{status:400});
- const stripe=new Stripe(stripeSecret);let event:Stripe.Event;
+ const stripe=new Stripe(stripeSecret);
+ async function chargeFor(reference:string){if(reference.startsWith('pi_')){const intent=await stripe.paymentIntents.retrieve(reference,{expand:['latest_charge']});return typeof intent.latest_charge==='string'?intent.latest_charge:intent.latest_charge?.id}const session=await stripe.checkout.sessions.retrieve(reference,{expand:['payment_intent.latest_charge']}),intent=session.payment_intent as Stripe.PaymentIntent|null;return typeof intent?.latest_charge==='string'?intent.latest_charge:intent?.latest_charge?.id}
+ let event:Stripe.Event;
  try{event=await stripe.webhooks.constructEventAsync(await req.text(),signature,webhookSecret)}catch(error){console.error('Stripe signature verification failed',error);return new Response('Bad signature',{status:400})}
  if(event.type==='payment_intent.succeeded'){
-  const intent=event.data.object as Stripe.PaymentIntent,meta=intent.metadata;if(meta.kind!=='waitlist_auto_pay')return new Response('ok');
+  const intent=event.data.object as Stripe.PaymentIntent,meta=intent.metadata;
+  if(meta.kind==='mobile_checkout'){
+   const db=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!),items=JSON.parse(meta.items??'[]'),listingIds=JSON.parse(meta.resaleListings??'[]') as string[];
+   try{if(items.length){const result=await db.rpc('fulfill_checkout',{p_session_id:intent.id,p_buyer_id:meta.buyerId,p_items:items});if(result.error)throw result.error}for(const listingId of listingIds){const result=await db.rpc('fulfill_ticket_resale',{p_listing:listingId,p_session:intent.id,p_buyer:meta.buyerId});if(result.error)throw result.error;const resale=Array.isArray(result.data)?result.data[0]:null,charge=resale?.original_checkout_session_id?await chargeFor(resale.original_checkout_session_id):null;if(!charge)throw Error('Original charge missing');const refund=await stripe.refunds.create({charge,amount:resale.seller_refund_cents,reverse_transfer:true},{idempotencyKey:`ticket-resale-${listingId}`});const marked=await db.rpc('mark_ticket_resale_refunded',{p_listing:listingId,p_refund:refund.id});if(marked.error)throw marked.error}return new Response('ok')}catch(error){console.error('Mobile checkout fulfillment error',error);return new Response('Mobile checkout fulfillment error',{status:409})}
+  }
+  if(meta.kind!=='waitlist_auto_pay')return new Response('ok');
   const db=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!),listingIds=JSON.parse(meta.resaleListings??'[]') as string[];
   try{
-   for(const listingId of listingIds){const {data,error}=await db.rpc('fulfill_ticket_resale',{p_listing:listingId,p_session:intent.id,p_buyer:meta.buyerId});if(error)throw error;const resale=Array.isArray(data)?data[0]:null;if(!resale?.original_checkout_session_id)throw Error('Original payment missing');const original=await stripe.checkout.sessions.retrieve(resale.original_checkout_session_id,{expand:['payment_intent.latest_charge']});const originalIntent=original.payment_intent as Stripe.PaymentIntent|null,charge=typeof originalIntent?.latest_charge==='string'?originalIntent.latest_charge:originalIntent?.latest_charge?.id;if(!charge)throw Error('Original charge missing');const refund=await stripe.refunds.create({charge,amount:resale.seller_refund_cents,reverse_transfer:true},{idempotencyKey:`ticket-resale-${listingId}`});const {error:refundError}=await db.rpc('mark_ticket_resale_refunded',{p_listing:listingId,p_refund:refund.id});if(refundError)throw refundError}
+   for(const listingId of listingIds){const {data,error}=await db.rpc('fulfill_ticket_resale',{p_listing:listingId,p_session:intent.id,p_buyer:meta.buyerId});if(error)throw error;const resale=Array.isArray(data)?data[0]:null;if(!resale?.original_checkout_session_id)throw Error('Original payment missing');const charge=await chargeFor(resale.original_checkout_session_id);if(!charge)throw Error('Original charge missing');const refund=await stripe.refunds.create({charge,amount:resale.seller_refund_cents,reverse_transfer:true},{idempotencyKey:`ticket-resale-${listingId}`});const {error:refundError}=await db.rpc('mark_ticket_resale_refunded',{p_listing:listingId,p_refund:refund.id});if(refundError)throw refundError}
    const {error:waitlistError}=await db.rpc('mark_waitlist_fulfilled',{p_waitlist:meta.waitlistId});if(waitlistError)throw waitlistError;return new Response('ok');
   }catch(error){console.error('Waitlist fulfillment error',error);return new Response('Waitlist fulfillment error',{status:409})}
  }
@@ -28,8 +35,7 @@ Deno.serve(async req=>{
  async function fulfillResale(listingId:string){
   const {data,error}=await db.rpc('fulfill_ticket_resale',{p_listing:listingId,p_session:session.id,p_buyer:meta!.buyerId});if(error)throw error;
   const resale=Array.isArray(data)?data[0]:null;if(!resale?.original_checkout_session_id)throw Error('Original payment missing');
-  const original=await stripe.checkout.sessions.retrieve(resale.original_checkout_session_id,{expand:['payment_intent.latest_charge']});
-  const intent=original.payment_intent as Stripe.PaymentIntent|null,charge=typeof intent?.latest_charge==='string'?intent.latest_charge:intent?.latest_charge?.id;if(!charge)throw Error('Original charge missing');
+  const charge=await chargeFor(resale.original_checkout_session_id);if(!charge)throw Error('Original charge missing');
   const refund=await stripe.refunds.create({charge,amount:resale.seller_refund_cents,reverse_transfer:true},{idempotencyKey:`ticket-resale-${listingId}`});
   const {error:refundError}=await db.rpc('mark_ticket_resale_refunded',{p_listing:listingId,p_refund:refund.id});if(refundError)throw refundError;
  }
